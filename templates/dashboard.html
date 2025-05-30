@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Auto Poster</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6">Instagram Auto Poster</h1>
+        
+        <!-- Status Card -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">System Status</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-blue-50 p-4 rounded">
+                    <h3 class="font-medium">Current Status</h3>
+                    <p class="text-2xl" id="current-status">{{ status }}</p>
+                </div>
+                <div class="bg-green-50 p-4 rounded">
+                    <h3 class="font-medium">Next Post</h3>
+                    <p class="text-2xl" id="next-post">
+                        {% if next_post %}{{ next_post }}{% else %}None scheduled{% endif %}
+                    </p>
+                </div>
+                <div class="bg-purple-50 p-4 rounded">
+                    <h3 class="font-medium">Actions</h3>
+                    <div class="flex space-x-2">
+                        <button id="pause-btn" class="bg-yellow-500 text-white px-3 py-1 rounded text-sm">
+                            {{ 'Resume' if paused else 'Pause' }}
+                        </button>
+                        <button id="stop-btn" class="bg-red-500 text-white px-3 py-1 rounded text-sm">
+                            Stop
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-gray-50 p-4 rounded">
+                    <h3 class="font-medium">System</h3>
+                    <button id="refresh-btn" class="bg-gray-500 text-white px-3 py-1 rounded text-sm">
+                        <i class="fas fa-sync-alt mr-1"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Folder Management -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Folder Management</h2>
+                
+                <div class="mb-4">
+                    <h3 class="font-medium mb-2">Create New Folder</h3>
+                    <div class="flex">
+                        <input type="text" id="folder-name" placeholder="Folder name" class="border rounded-l px-4 py-2 flex-grow">
+                        <button id="create-folder" class="bg-green-500 text-white px-4 py-2 rounded-r">
+                            Create
+                        </button>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="font-medium mb-2">Upload Files</h3>
+                    <div class="border-2 border-dashed rounded p-4 mb-2" id="drop-zone">
+                        <p class="text-center text-gray-500">
+                            <i class="fas fa-cloud-upload-alt fa-2x mb-2"></i><br>
+                            Drag & drop files here or click to select
+                        </p>
+                        <input type="file" id="file-input" class="hidden" multiple>
+                    </div>
+                    <select id="target-folder" class="border rounded px-4 py-2 w-full mb-2">
+                        {% for folder in all_folders %}
+                            <option value="{{ folder }}">{{ folder }}</option>
+                        {% endfor %}
+                    </select>
+                    <button id="upload-btn" class="bg-blue-500 text-white px-4 py-2 rounded w-full">
+                        <i class="fas fa-upload mr-2"></i> Upload Files
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Schedule Management -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Schedule Management</h2>
+                
+                <div class="mb-4">
+                    <h3 class="font-medium mb-2">Add to Schedule</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+                        <select id="schedule-folder" class="border rounded px-4 py-2 col-span-2">
+                            {% for folder in all_folders %}
+                                <option value="{{ folder }}">{{ folder }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="datetime-local" id="schedule-time" class="border rounded px-4 py-2">
+                    </div>
+                    <button id="add-schedule" class="bg-blue-500 text-white px-4 py-2 rounded w-full">
+                        <i class="far fa-calendar-plus mr-2"></i> Schedule Folder
+                    </button>
+                </div>
+                
+                <div>
+                    <h3 class="font-medium mb-2">Current Schedule</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full bg-white">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="py-2 px-4 border">Folder</th>
+                                    <th class="py-2 px-4 border">Post Time</th>
+                                    <th class="py-2 px-4 border">Status</th>
+                                    <th class="py-2 px-4 border">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="schedule-table">
+                                {% for folder, data in schedule.items() %}
+                                <tr>
+                                    <td class="py-2 px-4 border">{{ folder }}</td>
+                                    <td class="py-2 px-4 border">{{ data.post_time }}</td>
+                                    <td class="py-2 px-4 border">
+                                        <span class="{{ 'bg-yellow-100 text-yellow-800' if data.paused else 'bg-green-100 text-green-800' }} px-2 py-1 rounded text-xs">
+                                            {{ 'Paused' if data.paused else 'Scheduled' }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2 px-4 border">
+                                        <div class="flex space-x-1">
+                                            <button class="pause-btn bg-yellow-500 text-white px-2 py-1 rounded text-xs" data-folder="{{ folder }}" data-pause="{{ not data.paused }}">
+                                                {{ 'Resume' if data.paused else 'Pause' }}
+                                            </button>
+                                            <button class="skip-btn bg-red-500 text-white px-2 py-1 rounded text-xs" data-folder="{{ folder }}">
+                                                Skip
+                                            </button>
+                                            <button class="delete-btn bg-gray-500 text-white px-2 py-1 rounded text-xs" data-folder="{{ folder }}">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Posted Folders -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-xl font-semibold mb-4">Posted Folders</h2>
+            <div class="flex flex-wrap gap-2">
+                {% for folder in posted_folders %}
+                    <span class="bg-gray-200 px-3 py-1 rounded-full text-sm">{{ folder }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Logs -->
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-xl font-semibold mb-4">System Logs</h2>
+            <div class="bg-gray-800 text-green-400 p-4 rounded font-mono text-sm h-64 overflow-y-auto" id="log-container">
+                Loading logs...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update logs in real-time
+        function updateLogs() {
+            fetch('/api/logs')
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
+                .then(logs => {
+                    document.getElementById('log-container').innerHTML = 
+                        logs.map(log => `<div>${log}</div>`).join('');
+                    // Auto-scroll to bottom
+                    const container = document.getElementById('log-container');
+                    container.scrollTop = container.scrollHeight;
+                })
+                .catch(error => {
+                    console.error('Error fetching logs:', error);
+                });
+        }
+        
+        // Update status periodically
+        function updateStatus() {
+            fetch('/')
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.text();
+                })
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    document.getElementById('current-status').textContent = 
+                        doc.getElementById('current-status').textContent;
+                    document.getElementById('next-post').textContent = 
+                        doc.getElementById('next-post').textContent;
+                    
+                    // Update pause button text
+                    const newPauseBtn = doc.getElementById('pause-btn');
+                    if (newPauseBtn) {
+                        document.getElementById('pause-btn').textContent = newPauseBtn.textContent;
+                    }
+                    
+                    // Update schedule table
+                    const newTable = doc.getElementById('schedule-table');
+                    if (newTable) {
+                        document.getElementById('schedule-table').innerHTML = newTable.innerHTML;
+                        bindScheduleActions();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating status:', error);
+                });
+        }
+        
+        // Create folder
+        document.getElementById('create-folder').addEventListener('click', () => {
+            const folderName = document.getElementById('folder-name').value.trim();
+            if (!folderName) {
+                alert('Please enter a folder name');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('name', folderName);
+            
+            fetch('/api/create_folder', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert(`Folder "${data.folder}" created successfully!`);
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Error creating folder:', error);
+                alert('Failed to create folder');
+            });
+        });
+        
+        // File upload
+        document.getElementById('drop-zone').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+        
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                document.getElementById('drop-zone').innerHTML = `
+                    <p class="text-center text-green-500">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i><br>
+                        ${e.target.files.length} file(s) selected
+                    </p>
+                `;
+            }
+        });
+        
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            const files = document.getElementById('file-input').files;
+            const folder = document.getElementById('target-folder').value;
+            
+            if (files.length === 0) {
+                alert('Please select files first');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('folder', folder);
+            for (let i = 0; i < files.length; i++) {
+                formData.append('file', files[i]);
+            }
+            
+            fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert('Files uploaded successfully!');
+                    document.getElementById('file-input').value = '';
+                    document.getElementById('drop-zone').innerHTML = `
+                        <p class="text-center text-gray-500">
+                            <i class="fas fa-cloud-upload-alt fa-2x mb-2"></i><br>
+                            Drag & drop files here or click to select
+                        </p>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error uploading files:', error);
+                alert('Failed to upload files');
+            });
+        });
+        
+        // Drag and drop
+        const dropZone = document.getElementById('drop-zone');
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500', 'bg-blue-50');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500', 'bg-blue-50');
+            
+            if (e.dataTransfer.files.length > 0) {
+                document.getElementById('file-input').files = e.dataTransfer.files;
+                document.getElementById('drop-zone').innerHTML = `
+                    <p class="text-center text-green-500">
+                        <i class="fas fa-check-circle fa-2x mb-2"></i><br>
+                        ${e.dataTransfer.files.length} file(s) selected
+                    </p>
+                `;
+            }
+        });
+        
+        // Schedule management
+        document.getElementById('add-schedule').addEventListener('click', () => {
+            const folder = document.getElementById('schedule-folder').value;
+            const timeInput = document.getElementById('schedule-time').value;
+            
+            if (!folder || !timeInput) {
+                alert('Please select folder and time');
+                return;
+            }
+            
+            // Convert datetime-local input to proper format
+            const postTime = new Date(timeInput);
+            const formattedTime = postTime.toISOString().replace('T', ' ').substring(0, 19);
+            
+            fetch('/api/schedule', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    folder: folder,
+                    post_time: formattedTime
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert('Folder scheduled successfully!');
+                    updateStatus();
+                }
+            })
+            .catch(error => {
+                console.error('Error scheduling folder:', error);
+                alert('Failed to schedule folder');
+            });
+        });
+        
+        // Bind schedule actions
+        function bindScheduleActions() {
+            document.querySelectorAll('.pause-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const folder = this.getAttribute('data-folder');
+                    const pause = this.getAttribute('data-pause') === 'true';
+                    
+                    fetch('/api/schedule/pause', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            folder: folder,
+                            pause: pause
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.error) {
+                            alert(`Error: ${data.error}`);
+                        } else {
+                            alert(data.message);
+                            updateStatus();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error pausing schedule:', error);
+                        alert('Failed to update schedule');
+                    });
+                });
+            });
+            
+            document.querySelectorAll('.skip-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const folder = this.getAttribute('data-folder');
+                    
+                    if (!confirm(`Are you sure you want to skip ${folder}?`)) {
+                        return;
+                    }
+                    
+                    fetch('/api/schedule/skip', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            folder: folder
+                        })
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.error) {
+                            alert(`Error: ${data.error}`);
+                        } else {
+                            alert(data.message);
+                            location.reload();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error skipping folder:', error);
+                        alert('Failed to skip folder');
+                    });
+                });
+            });
+            
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const folder = this.getAttribute('data-folder');
+                    
+                    if (!confirm(`Are you sure you want to remove ${folder} from schedule?`)) {
+                        return;
+                    }
+                    
+                    fetch(`/api/schedule?folder=${encodeURIComponent(folder)}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => {
+                        if (!response.ok) throw new Error('Network response was not ok');
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.error) {
+                            alert(`Error: ${data.error}`);
+                        } else {
+                            alert('Schedule removed successfully!');
+                            updateStatus();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting schedule:', error);
+                        alert('Failed to remove schedule');
+                    });
+                });
+            });
+        }
+        
+        // Control buttons
+        document.getElementById('pause-btn').addEventListener('click', function() {
+            const action = this.textContent.trim().toLowerCase();
+            
+            fetch('/api/control', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: action
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert(data.message);
+                    this.textContent = action === 'pause' ? 'Resume' : 'Pause';
+                    updateStatus();
+                }
+            })
+            .catch(error => {
+                console.error('Error controlling poster:', error);
+                alert('Failed to control poster');
+            });
+        });
+        
+        document.getElementById('stop-btn').addEventListener('click', function() {
+            if (!confirm('Are you sure you want to stop the poster?')) {
+                return;
+            }
+            
+            fetch('/api/control', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'stop'
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                } else {
+                    alert(data.message);
+                    updateStatus();
+                }
+            })
+            .catch(error => {
+                console.error('Error stopping poster:', error);
+                alert('Failed to stop poster');
+            });
+        });
+        
+        document.getElementById('refresh-btn').addEventListener('click', function() {
+            location.reload();
+        });
+        
+        // Initialize
+        bindScheduleActions();
+        
+        // Set default datetime to now + 1 hour
+        const now = new Date();
+        now.setHours(now.getHours() + 1);
+        document.getElementById('schedule-time').value = now.toISOString().slice(0, 16);
+        
+        // Update every 5 seconds
+        setInterval(updateLogs, 5000);
+        setInterval(updateStatus, 10000);
+        updateLogs();
+    </script>
+</body>
+</html>
